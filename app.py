@@ -2,16 +2,17 @@ import streamlit as st
 import pandas as pd
 import datetime
 import re
+import time
 
 # ==========================================
-# MASUKKAN LINK CSV PUBLISH TO WEB DI SINI
+# LINK GOOGLE SHEET (Telah dimasukkan)
 # ==========================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQZ6tx2sYh-Qo6_oTTjj4cmPqi4ID3v_wQSqGumh5rLekMCe25IwRkEXEb9LS0hB1B9zRW0RcSaG84W/pub?gid=0&single=true&output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/103YxYTV0SECLCN7lkbWCVph8wRzVxqoPZozLb8d9Lc0/edit?gid=0#gid=0"
 
 # 1. Konfigurasi Halaman
 st.set_page_config(page_title="Sistem Pemantauan Projek PPUN", page_icon="🏢", layout="wide")
 
-# 2. CSS untuk jadikan butang dan kad lebih premium
+# 2. CSS untuk rekaan Korporat & Kad
 st.markdown("""
     <style>
         .stApp { background-color: #F8FAFC; }
@@ -41,24 +42,40 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 4. Fungsi menukar link Google Drive kepada imej yang boleh dipapar
+# 4. Fungsi memproses URL Gambar Google Drive
 def dapatkan_link_gambar(url):
-    if pd.isna(url) or url == "-":
+    if pd.isna(url) or url == "-": 
         return None
     match = re.search(r'/d/([a-zA-Z0-9_-]+)', str(url)) or re.search(r'id=([a-zA-Z0-9_-]+)', str(url))
-    if match:
+    if match: 
         return f"https://drive.google.com/uc?export=view&id={match.group(1)}"
     return str(url)
 
-# 5. Fungsi Load Data
-@st.cache_data(ttl=30)
+# 5. Fungsi Pintas Cache Google
+def bina_link_live(url):
+    if "export?format=csv" in url:
+        return f"{url}&t={time.time()}"
+    match = re.search(r'/d/([a-zA-Z0-9-_]+)', url)
+    if match:
+        file_id = match.group(1)
+        gid_match = re.search(r'[#&?]gid=([0-9]+)', url)
+        gid = f"&gid={gid_match.group(1)}" if gid_match else ""
+        return f"https://docs.google.com/spreadsheets/d/{file_id}/export?format=csv{gid}&t={time.time()}"
+    return url
+
+# 6. Fungsi Load Data dari Sheet
+@st.cache_data(ttl=1)
 def load_data(url):
     try:
-        df = pd.read_csv(url, skiprows=1)
+        live_url = bina_link_live(url)
+        # Baca CSV, abaikan tajuk besar baris 1
+        df = pd.read_csv(live_url, skiprows=1)
+        
+        # Bersihkan lajur pelik 'Unnamed'
         df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
         df = df.dropna(how='all').fillna("-")
         
-        # Bersihkan nombor 'Bil.' supaya tak jadi 1.0, 2.0
+        # Bersihkan format nombor Bil.
         if 'Bil.' in df.columns:
             df['Bil.'] = pd.to_numeric(df['Bil.'], errors='coerce').fillna(0).astype(int).astype(str)
             df['Bil.'] = df['Bil.'].replace('0', '-')
@@ -67,26 +84,22 @@ def load_data(url):
     except Exception as e:
         return pd.DataFrame()
 
-with st.spinner('Menarik data dari Google Sheet...'):
+with st.spinner('Menarik data terkini dari pangkalan data...'):
     df = load_data(SHEET_URL)
 
 if not df.empty:
-    # 6. Sistem Filter (Dropdown)
+    # 7. Sistem Dropdown & Carian
     st.subheader("🔍 Carian & Tapisan")
     col_f1, col_f2, col_f3 = st.columns(3)
     
-    # Dapatkan senarai unik untuk Dropdown
     senarai_agensi = ["Semua Agensi"] + list(df['Agensi Pelaksana'].unique()) if 'Agensi Pelaksana' in df.columns else ["Semua Agensi"]
     senarai_agensi = [x for x in senarai_agensi if x != "-"]
     
-    with col_f1:
-        carian_teks = st.text_input("Cari Tajuk / Skop Kerja:")
-    with col_f2:
-        pilih_agensi = st.selectbox("Pilih Agensi:", senarai_agensi)
-    with col_f3:
-        pilih_status = st.selectbox("Status Semasa:", ["Semua Status", "Telah Siap", "Dalam Pelaksanaan", "Lain-lain"])
+    with col_f1: carian_teks = st.text_input("Cari Tajuk / Skop Kerja:")
+    with col_f2: pilih_agensi = st.selectbox("Pilih Agensi:", senarai_agensi)
+    with col_f3: pilih_status = st.selectbox("Status Semasa:", ["Semua Status", "Telah Siap", "Dalam Pelaksanaan", "Lain-lain"])
 
-    # Logik Tapisan Data
+    # Logik Tapisan
     df_tapis = df.copy()
     
     if carian_teks:
@@ -102,12 +115,12 @@ if not df.empty:
         if pilih_status == "Telah Siap":
             df_tapis = df_tapis[df_tapis['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)]
         elif pilih_status == "Dalam Pelaksanaan":
-            df_tapis = df_tapis[df_tapis['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana", case=False, na=False)]
+            df_tapis = df_tapis[df_tapis['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)]
 
     st.write("---")
     st.subheader(f"📋 Senarai Projek ({len(df_tapis)} rekod ditemui)")
 
-    # 7. Paparan Data Bentuk Kad & Gambar (Bukan Jadual Bosan)
+    # 8. Paparan Kad & Gambar
     if not df_tapis.empty:
         for idx, row in df_tapis.iterrows():
             with st.container():
@@ -118,7 +131,6 @@ if not df.empty:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Buka expander untuk detail & gambar
                 with st.expander("Klik untuk lihat perincian & gambar projek"):
                     detail_col1, detail_col2 = st.columns([2, 1])
                     
@@ -128,11 +140,10 @@ if not df.empty:
                         st.markdown(f"**Peruntukan:** {row.get('Peruntukkan', '-')} | **Kos Projek:** {row.get('Kos Projek', '-')}")
                         st.markdown(f"**Tarikh:** {row.get('Tarikh Mula', '-')} hingga {row.get('Tarikh Siap', '-')}")
                         
-                        # Formatting status text
                         stat_text = str(row.get('Status Semasa', '-'))
                         if "siap" in stat_text.lower():
                             st.markdown(f"**Status Semasa:** <span class='badge-siap'>{stat_text}</span>", unsafe_allow_html=True)
-                        elif "proses" in stat_text.lower() or "laksana" in stat_text.lower():
+                        elif "proses" in stat_text.lower() or "laksana" in stat_text.lower() or "sedang" in stat_text.lower():
                             st.markdown(f"**Status Semasa:** <span class='badge-proses'>{stat_text}</span>", unsafe_allow_html=True)
                         else:
                             st.markdown(f"**Status Semasa:** <span class='badge-lewat'>{stat_text}</span>", unsafe_allow_html=True)
@@ -144,14 +155,14 @@ if not df.empty:
                         if gambar_url and "http" in gambar_url:
                             st.image(gambar_url, caption="Gambar Tapak Projek", use_container_width=True)
                         else:
-                            st.info("Tiada gambar dimuat naik.")
+                            st.info("Tiada gambar dimasukkan untuk projek ini.")
     else:
         st.warning("Tiada rekod projek yang sepadan dengan carian/tapisan anda.")
 
     st.write("")
-    if st.button("*Refresh* Data 🔄"):
+    if st.button("*Refresh* Data Terkini 🔄"):
         st.cache_data.clear()
         st.rerun()
 
 else:
-    st.error("Gagal menarik data. Sila pastikan link CSV Google Sheet dimasukkan dengan betul.")
+    st.error("Gagal menarik data. Pastikan Google Sheet diset kepada 'Anyone with the link' (Viewer).")
