@@ -8,22 +8,18 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQZ6tx2sYh-Qo6_oTTj
 # 1. Konfigurasi Halaman (Mesti di baris atas sekali)
 st.set_page_config(page_title="Dashboard Projek PPUN", page_icon="🏢", layout="wide")
 
-# 2. Suntikan CSS Korporat MOTAC (Biru Navy & Emas)
+# 2. Suntikan CSS Korporat MOTAC
 st.markdown("""
     <style>
-        /* Tukar background putih ke kelabu lembut / profesional */
         .stApp { background-color: #F1F5F9; }
-        
-        /* Sembunyikan menu Streamlit default di atas (Hamburger) */
         #MainMenu {visibility: hidden;}
         header {visibility: hidden;}
         
-        /* Banner Tajuk Korporat */
         .corporate-header {
-            background-color: #17365D; /* Biru Navy */
+            background-color: #17365D;
             padding: 30px;
             border-radius: 12px;
-            border-bottom: 5px solid #D4AF37; /* Emas Korporat */
+            border-bottom: 5px solid #D4AF37;
             box-shadow: 0 4px 10px rgba(0,0,0,0.15);
             margin-bottom: 25px;
             margin-top: -40px;
@@ -31,7 +27,6 @@ st.markdown("""
         .corporate-header h1 { color: #FFFFFF !important; font-size: 32px; font-weight: bold; margin: 0; font-family: 'Arial', sans-serif;}
         .corporate-header p { color: #CBD5E1 !important; font-size: 15px; margin-top: 5px; }
 
-        /* Design Kad Metrik (Statistik) */
         div[data-testid="metric-container"] {
             background-color: #FFFFFF;
             border: 1px solid #E2E8F0;
@@ -43,7 +38,6 @@ st.markdown("""
         div[data-testid="metric-container"] label { color: #64748B !important; font-weight: bold; font-size: 14px; text-transform: uppercase; }
         div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #17365D !important; font-weight: bold; font-size: 36px; }
 
-        /* Design Jadual Data (Ganti default Streamlit table) */
         .styled-table {
             width: 100%;
             border-collapse: collapse;
@@ -55,11 +49,7 @@ st.markdown("""
             border-radius: 10px;
             overflow: hidden;
         }
-        .styled-table thead tr {
-            background-color: #17365D;
-            color: #ffffff;
-            text-align: left;
-        }
+        .styled-table thead tr { background-color: #17365D; color: #ffffff; text-align: left; }
         .styled-table th, .styled-table td { padding: 15px; }
         .styled-table tbody tr { border-bottom: 1px solid #dddddd; }
         .styled-table tbody tr:nth-of-type(even) { background-color: #F8FAFC; }
@@ -76,32 +66,34 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 4. Fungsi Load Data dari Sheet (Dibaiki)
+# 4. Fungsi Load Data dari Sheet (Dibaiki sepenuhnya)
 @st.cache_data(ttl=30)
 def load_data(url):
     try:
-        # skiprows=1 akan mengabaikan tajuk besar di baris pertama
-        # header=0 memastikan baris "Bil.", "Agensi Pelaksana" dijadikan kepala jadual sebenar
-        df = pd.read_csv(url, skiprows=1, header=0)
+        # skiprows=1 akan abaikan tajuk besar "ROJEK DI BAWAH PERUNTUKAN..." di baris 1
+        df = pd.read_csv(url, skiprows=1)
         
-        # Buang lajur yang mungkin terbaca sebagai 'Unnamed' akibat format Sheet
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        # Buang lajur-lajur rosak bernama 'Unnamed'
+        df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
         
-        # Buang baris kosong dan tukar NaN jadi "-"
+        # Buang baris yang kosong & tukar NaN jadi "-"
         df = df.dropna(how='all').fillna("-") 
         
         return df
     except Exception as e:
-        st.error(f"Ralat sistem: {e}")
         return pd.DataFrame()
+
+with st.spinner('Sedang menarik data dari pelayan...'):
+    df = load_data(SHEET_URL)
+
+if not df.empty:
     
     # 5. Bahagian Statistik
     col1, col2, col3 = st.columns(3)
     
-    # Tukar nama 'Status Semasa' di bawah ini mengikut nama kolum sebenar dalam Google Sheet kau
     if 'Status Semasa' in df.columns:
         siap = df[df['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)].shape[0]
-        proses = df[df['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana", case=False, na=False)].shape[0]
+        proses = df[df['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)].shape[0]
     else:
         siap, proses = 0, 0
 
@@ -116,14 +108,13 @@ def load_data(url):
     
     if carian:
         mask = pd.Series([False] * len(df))
-        # Tapis mengikut apa sahaja maklumat dalam jadual
         for col in df.columns:
             mask = mask | df[col].astype(str).str.contains(carian, case=False, na=False)
         df_dipapar = df[mask]
     else:
         df_dipapar = df
 
-    # 7. Render Jadual menggunakan HTML supaya nampak cantik & korporat
+    # 7. Render Jadual menggunakan HTML
     if not df_dipapar.empty:
         html_table = df_dipapar.to_html(classes="styled-table", index=False, escape=False)
         st.markdown(html_table, unsafe_allow_html=True)
@@ -132,10 +123,10 @@ def load_data(url):
 
     st.write("")
     
-    # 8. Butang Refresh Condong (Italic)
+    # 8. Butang Refresh
     if st.button("*Refresh* 🔄"):
         st.cache_data.clear()
         st.rerun()
 
 else:
-    st.error("Gagal menarik data. Pastikan link Google Sheet dimasukkan dengan betul.")
+    st.error("Gagal menarik data. Sila pastikan link CSV Google Sheet dimasukkan dengan betul.")
