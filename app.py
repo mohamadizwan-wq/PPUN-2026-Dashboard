@@ -76,20 +76,24 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 4. Fungsi Load Data dari Sheet
-@st.cache_data(ttl=30) # Refresh automatik lepas 30 saat
+# 4. Fungsi Load Data dari Sheet (Dibaiki)
+@st.cache_data(ttl=30)
 def load_data(url):
     try:
-        df = pd.read_csv(url)
-        df = df.dropna(how='all').fillna("-") # Buang baris kosong, tukar NaN jadi "-"
+        # skiprows=1 akan mengabaikan tajuk besar di baris pertama
+        # header=0 memastikan baris "Bil.", "Agensi Pelaksana" dijadikan kepala jadual sebenar
+        df = pd.read_csv(url, skiprows=1, header=0)
+        
+        # Buang lajur yang mungkin terbaca sebagai 'Unnamed' akibat format Sheet
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        
+        # Buang baris kosong dan tukar NaN jadi "-"
+        df = df.dropna(how='all').fillna("-") 
+        
         return df
     except Exception as e:
+        st.error(f"Ralat sistem: {e}")
         return pd.DataFrame()
-
-with st.spinner('Sedang menarik data dari pelayan...'):
-    df = load_data(SHEET_URL)
-
-if not df.empty:
     
     # 5. Bahagian Statistik
     col1, col2, col3 = st.columns(3)
