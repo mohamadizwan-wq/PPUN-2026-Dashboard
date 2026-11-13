@@ -71,14 +71,9 @@ st.markdown("""
         .b-lewat { background: #FEE2E2; color: #991B1B; border: 1px solid #F87171; }
         hr { border-color: #E2E8F0; margin: 15px 0; }
         
-        /* Design butang expander */
         .streamlit-expanderHeader {
-            font-size: 16px !important;
-            font-weight: bold !important;
-            color: #1E293B !important;
-            background-color: #F8FAFC !important;
-            border-radius: 8px !important;
-            border: 1px solid #E2E8F0 !important;
+            font-size: 16px !important; font-weight: bold !important; color: #1E293B !important;
+            background-color: #F8FAFC !important; border-radius: 8px !important; border: 1px solid #E2E8F0 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -90,17 +85,6 @@ def get_base64_image(file_name):
             with open(path, "rb") as f:
                 return f"data:image/{ext.replace('.', '')};base64,{base64.b64encode(f.read()).decode()}"
     return None
-
-def dapatkan_senarai_gambar(teks):
-    if pd.isna(teks) or teks == "-": return []
-    teks = str(teks)
-    ids = re.findall(r'/d/([a-zA-Z0-9_-]+)', teks)
-    ids += re.findall(r'id=([a-zA-Z0-9_-]+)', teks)
-    ids = list(set(ids))
-    urls = []
-    for file_id in ids:
-        urls.append(f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000")
-    return urls
 
 def bina_link_live(url):
     if "export?format=csv" in url: return f"{url}&t={time.time()}"
@@ -127,16 +111,48 @@ def load_data(url):
         return pd.DataFrame()
 
 # ==========================================
+# FUNGSI BARU: PECAHKAN TARIKH DARI DALAM SEL (ALT+ENTER)
+# ==========================================
+def dapatkan_senarai_tarikh_dari_sel(teks):
+    if pd.isna(teks) or teks == "-": return []
+    # Pecahkan jika guna Alt+Enter (\n) atau koma
+    tarikh_list = re.split(r'[\n,]', str(teks))
+    return [t.strip() for t in tarikh_list if t.strip()]
+
+# FUNGSI BARU: PECAHKAN GAMBAR IKUT BARIS (ALT+ENTER) SUPAYA PADAN DENGAN TARIKH
+def dapatkan_gambar_mengikut_tarikh(semua_teks_gambar, indeks_tarikh):
+    if pd.isna(semua_teks_gambar) or semua_teks_gambar == "-": return []
+    teks = str(semua_teks_gambar)
+    
+    # Pecahkan baris gambar mengikut Alt+Enter
+    baris_gambar = re.split(r'[\n]', teks)
+    
+    # Jika bilangan baris gambar dan tarikh tak sama, kita ambil semua gambar
+    if len(baris_gambar) <= indeks_tarikh:
+        ids = re.findall(r'/d/([a-zA-Z0-9_-]+)', teks)
+        ids += re.findall(r'id=([a-zA-Z0-9_-]+)', teks)
+    else:
+        # Jika sama, ambil ID gambar dari baris yang betul-betul sepadan dengan indeks tarikh
+        baris_pilihan = baris_gambar[indeks_tarikh]
+        ids = re.findall(r'/d/([a-zA-Z0-9_-]+)', baris_pilihan)
+        ids += re.findall(r'id=([a-zA-Z0-9_-]+)', baris_pilihan)
+        
+    ids = list(set(ids))
+    urls = []
+    for file_id in ids:
+        urls.append(f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000")
+    return urls
+
+
+# ==========================================
 # 1. LOGO JATA & JABATAN
 # ==========================================
 jata_img = get_base64_image("jata")
 jabatan_img = get_base64_image("jabatan")
 
 logo_html = '<div style="display: flex; align-items: center; gap: 25px; margin-bottom: 5px;">'
-if jata_img:
-    logo_html += f'<img src="{jata_img}" style="height: 90px; object-fit: contain;">'
-if jabatan_img:
-    logo_html += f'<img src="{jabatan_img}" style="height: 90px; object-fit: contain;">'
+if jata_img: logo_html += f'<img src="{jata_img}" style="height: 90px; object-fit: contain;">'
+if jabatan_img: logo_html += f'<img src="{jabatan_img}" style="height: 90px; object-fit: contain;">'
 logo_html += '</div>'
 
 st.markdown(logo_html, unsafe_allow_html=True)
@@ -146,11 +162,15 @@ with st.spinner('Menyegerak pangkalan data MOTAC...'):
 
 if not df.empty:
     
+    # Dapatkan Tarikh Last Update dari keseluruhan Sheet
     tarikh_last_save = "Tiada Rekod"
     if 'Tarikh Kemaskini' in df.columns:
-        tarikh_sah = df[df['Tarikh Kemaskini'] != '-']['Tarikh Kemaskini']
-        if not tarikh_sah.empty:
-            tarikh_last_save = tarikh_sah.iloc[-1] # Ambil rekod paling latest di bawah sheet
+        for val in reversed(df['Tarikh Kemaskini'].tolist()):
+            if val != '-':
+                senarai = dapatkan_senarai_tarikh_dari_sel(val)
+                if senarai:
+                    tarikh_last_save = senarai[-1]
+                    break
 
     # ==========================================
     # 2. BANNER UTAMA
@@ -167,11 +187,7 @@ if not df.empty:
     # ==========================================
     # 3. KAD KPI STATISTIK
     # ==========================================
-    # Pastikan statistik hanya kira 1 projek 1 status (tak duplicate kalau ada banyak tarikh)
-    if 'Tajuk Program' in df.columns:
-        df_latest = df.drop_duplicates(subset=['Tajuk Program'], keep='last')
-    else:
-        df_latest = df
+    df_latest = df.drop_duplicates(subset=['Tajuk Program'], keep='last') if 'Tajuk Program' in df.columns else df
         
     jumlah_projek = len(df_latest)
     siap = df_latest[df_latest['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)].shape[0] if 'Status Semasa' in df_latest.columns else 0
@@ -233,23 +249,17 @@ if not df.empty:
     # ==========================================
     if pilihan_akhir != "-- Sila Pilih Projek Untuk Dipaparkan --":
         
-        # Ambil SEMUA rekod (sejarah) untuk projek yang dipilih ni dari master dataframe
-        df_projek_ini = df[df['Tajuk Program'] == pilihan_akhir].copy()
+        row = df_tapis[df_tapis['Tajuk Program'] == pilihan_akhir].iloc[0]
         
-        # Dapatkan senarai tarikh yang ada untuk projek ni
-        senarai_tarikh_projek = df_projek_ini['Tarikh Kemaskini'].astype(str).unique().tolist()
-        
-        # Paparkan dropdown pilih tarikh
+        # Ekstrak senarai tarikh dari dalam SATU SEL
+        senarai_tarikh_projek = dapatkan_senarai_tarikh_dari_sel(row.get('Tarikh Kemaskini', '-'))
+        if not senarai_tarikh_projek: senarai_tarikh_projek = ["Tiada Tarikh Direkodkan"]
+
         st.markdown('<div class="date-selector-card">', unsafe_allow_html=True)
         col_t1, col_t2 = st.columns([1, 2])
-        with col_t1:
-            st.markdown("<h4 style='margin-top:5px; color:#1E293B;'>📅 Pilih Tarikh Laporan:</h4>", unsafe_allow_html=True)
-        with col_t2:
-            pilihan_tarikh = st.selectbox("Sila pilih rekod tarikh kemajuan yang ingin dilihat:", senarai_tarikh_projek, label_visibility="collapsed")
+        with col_t1: st.markdown("<h4 style='margin-top:5px; color:#1E293B;'>📅 Pilih Tarikh Laporan:</h4>", unsafe_allow_html=True)
+        with col_t2: pilihan_tarikh = st.selectbox("Sila pilih rekod tarikh kemajuan yang ingin dilihat:", senarai_tarikh_projek, label_visibility="collapsed")
         st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Filter rekod berdasarkan tarikh yang dipilih
-        row = df_projek_ini[df_projek_ini['Tarikh Kemaskini'].astype(str) == pilihan_tarikh].iloc[-1]
         
         stat_text = str(row.get('Status Semasa', '-'))
         if "siap" in stat_text.lower() or "selesai" in stat_text.lower(): badge_html = f"<span class='badge b-siap'>✓ {stat_text.upper()}</span>"
@@ -269,54 +279,4 @@ if not df.empty:
                 <hr>
             """, unsafe_allow_html=True)
             
-            col1, col2, col3 = st.columns([1.5, 1, 1])
-            with col1:
-                st.markdown("**📌 Skop Kerja Utama:**")
-                st.info(row.get('Skop Kerja', '-'))
-            with col2:
-                st.markdown("**💰 Kewangan & Tempoh:**")
-                st.write(f"**Peruntukan:** {row.get('Peruntukkan', '-')}")
-                st.write(f"**Kos Projek:** {row.get('Kos Projek', '-')}")
-                st.write(f"**Tarikh Mula:** {row.get('Tarikh Mula', '-')}")
-                st.write(f"**Tarikh Siap:** {row.get('Tarikh Siap', '-')}")
-            with col3:
-                st.markdown("**👷🏻‍♂️ Pelaksanaan (Rekod Pada Tarikh Dipilih):**")
-                st.write(f"**Kontraktor:** {row.get('Kontraktor', '-')}")
-                st.write(f"**Kemajuan Fizikal:** {row.get('Peratus Siap Kerja', '-')}")
-                st.write(f"**Tarikh Kemaskini:** {pilihan_tarikh}")
-            
-            st.markdown("<hr style='border-color: #E2E8F0;'>", unsafe_allow_html=True)
-            
-            # RUANG GALERI GAMBAR
-            senarai_gambar = dapatkan_senarai_gambar(row.get('Gambar Projek', '-'))
-            
-            if senarai_gambar:
-                with st.expander(f"📸 KLIK DI SINI UNTUK BUKA GALERI GAMBAR PROJEK (REKOD: {pilihan_tarikh})"):
-                    st.markdown(f"<h4 style='color:#1E293B; text-align:center;'>Visual Tapak Projek (Kemaskini: {pilihan_tarikh})</h4><br>", unsafe_allow_html=True)
-                    
-                    img_cols = st.columns(3)
-                    for i, img_url in enumerate(senarai_gambar):
-                        with img_cols[i % 3]:
-                            st.image(img_url, caption=f"Gambar {i+1} | Tarikh: {pilihan_tarikh}", use_container_width=True)
-            else:
-                st.info(f"📷 Tiada gambar dimasukkan untuk projek ini pada rekod tarikh {pilihan_tarikh}.")
-                
-            st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.info("👆 Sila gunakan kotak 'Pilih Projek' di atas untuk memaparkan butiran dan gambar.")
-
-    # ==========================================
-    # 6. LOGO MADANI
-    # ==========================================
-    st.write("")
-    st.write("")
-    madani_img = get_base64_image("madani")
-    if madani_img:
-        st.markdown(f"""
-            <div style="text-align: center; margin-top: 40px; margin-bottom: 20px;">
-                <img src="{madani_img}" style="height: 120px; object-fit: contain;">
-            </div>
-        """, unsafe_allow_html=True)
-
-else:
-    st.error("Gagal menarik data. Pastikan Google Sheet diset kepada 'Anyone with the link' (Viewer).")
+            col1, col2, col3 = st.columns([1.5
