@@ -66,7 +66,7 @@ st.markdown("""
         .b-lewat { background: #FEE2E2; color: #991B1B; border: 1px solid #F87171; }
         hr { border-color: #E2E8F0; margin: 15px 0; }
         
-        /* Ubah design butang expander supaya nampak macam landing page button */
+        /* Design butang expander */
         .streamlit-expanderHeader {
             font-size: 16px !important;
             font-weight: bold !important;
@@ -86,21 +86,22 @@ def get_base64_image(file_name):
                 return f"data:image/{ext.replace('.', '')};base64,{base64.b64encode(f.read()).decode()}"
     return None
 
-# FUNGSI BARU: Cari BANYAK link gambar serentak dari satu petak
+# FUNGSI BARU (DIPERBAIKI): Guna enjin 'thumbnail' Google Drive supaya gambar tak patah
 def dapatkan_senarai_gambar(teks):
     if pd.isna(teks) or teks == "-": return []
     teks = str(teks)
     
-    # Cari semua ID Google drive yang dicampur-campur
+    # Cari semua ID Google drive
     ids = re.findall(r'/d/([a-zA-Z0-9_-]+)', teks)
     ids += re.findall(r'id=([a-zA-Z0-9_-]+)', teks)
     
-    # Buang ID yang berulang (duplicate)
+    # Buang ID yang berulang
     ids = list(set(ids))
     
     urls = []
     for file_id in ids:
-        urls.append(f"https://drive.google.com/uc?export=view&id={file_id}")
+        # Guna endpoint thumbnail w1000 (lebar 1000px) untuk pintas sekuriti Google
+        urls.append(f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000")
     return urls
 
 def bina_link_live(url):
@@ -235,7 +236,6 @@ if not df.empty:
         elif "proses" in stat_text.lower() or "laksana" in stat_text.lower() or "sedang" in stat_text.lower(): badge_html = f"<span class='badge b-proses'>⏳ {stat_text.upper()}</span>"
         else: badge_html = f"<span class='badge b-lewat'>⚠️ {stat_text.upper()}</span>"
 
-        # Dapatkan Tarikh Kemaskini Khusus Projek Ini
         tarikh_projek_ini = row.get('Tarikh Kemaskini', 'Tiada Tarikh')
 
         with st.container():
@@ -270,17 +270,17 @@ if not df.empty:
             
             st.markdown("<hr style='border-color: #E2E8F0;'>", unsafe_allow_html=True)
             
-            # RUANG LANDING PAGE GAMBAR (GALERI)
+            # RUANG GALERI GAMBAR
             senarai_gambar = dapatkan_senarai_gambar(row.get('Gambar Projek', '-'))
             
             if senarai_gambar:
                 with st.expander("📸 KLIK DI SINI UNTUK BUKA GALERI GAMBAR PROJEK"):
                     st.markdown(f"<h4 style='color:#1E293B; text-align:center;'>Visual Tapak Projek (Kemaskini: {tarikh_projek_ini})</h4><br>", unsafe_allow_html=True)
                     
-                    # Susun gambar dalam grid 3 lajur supaya kemas walau banyak gambar
                     img_cols = st.columns(3)
                     for i, img_url in enumerate(senarai_gambar):
                         with img_cols[i % 3]:
+                            # Gambar ditarik guna URL Thumbnail
                             st.image(img_url, caption=f"Gambar {i+1} | Tarikh: {tarikh_projek_ini}", use_container_width=True)
             else:
                 st.info("📷 Tiada gambar dimasukkan untuk projek ini.")
@@ -290,7 +290,7 @@ if not df.empty:
         st.info("👆 Sila gunakan kotak 'Pilih Projek' di atas untuk memaparkan butiran dan gambar.")
 
     # ==========================================
-    # 6. LOGO MADANI (TENGAH BAWAH)
+    # 6. LOGO MADANI
     # ==========================================
     st.write("")
     st.write("")
