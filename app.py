@@ -5,96 +5,133 @@ import datetime
 # --- TUKAR LINK INI DENGAN LINK CSV PUBLISH TO WEB ANDA ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQZ6tx2sYh-Qo6_oTTjj4cmPqi4ID3v_wQSqGumh5rLekMCe25IwRkEXEb9LS0hB1B9zRW0RcSaG84W/pub?gid=0&single=true&output=csv"
 
-# Konfigurasi Halaman (Mesti di baris atas sekali)
+# 1. Konfigurasi Halaman (Mesti di baris atas sekali)
 st.set_page_config(page_title="Dashboard Projek PPUN", page_icon="🏢", layout="wide")
 
-# CSS Tambahan untuk bagi nampak lebih kemas
+# 2. Suntikan CSS Korporat MOTAC (Biru Navy & Emas)
 st.markdown("""
-<style>
-    .stMetric { background-color: #F8FAFC; padding: 15px; border-radius: 8px; border-left: 5px solid #17365D; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .css-1d391kg { padding-top: 2rem; }
-    h1 { color: #17365D; border-bottom: 3px solid #D4AF37; padding-bottom: 10px; margin-bottom: 20px;}
-    .badge-siap { background-color: #DCFCE7; color: #166534; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: bold;}
-    .badge-proses { background-color: #FEF9C3; color: #854D0E; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: bold;}
-</style>
+    <style>
+        /* Tukar background putih ke kelabu lembut / profesional */
+        .stApp { background-color: #F1F5F9; }
+        
+        /* Sembunyikan menu Streamlit default di atas (Hamburger) */
+        #MainMenu {visibility: hidden;}
+        header {visibility: hidden;}
+        
+        /* Banner Tajuk Korporat */
+        .corporate-header {
+            background-color: #17365D; /* Biru Navy */
+            padding: 30px;
+            border-radius: 12px;
+            border-bottom: 5px solid #D4AF37; /* Emas Korporat */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            margin-bottom: 25px;
+            margin-top: -40px;
+        }
+        .corporate-header h1 { color: #FFFFFF !important; font-size: 32px; font-weight: bold; margin: 0; font-family: 'Arial', sans-serif;}
+        .corporate-header p { color: #CBD5E1 !important; font-size: 15px; margin-top: 5px; }
+
+        /* Design Kad Metrik (Statistik) */
+        div[data-testid="metric-container"] {
+            background-color: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-left: 6px solid #17365D;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        div[data-testid="metric-container"] label { color: #64748B !important; font-weight: bold; font-size: 14px; text-transform: uppercase; }
+        div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #17365D !important; font-weight: bold; font-size: 36px; }
+
+        /* Design Jadual Data (Ganti default Streamlit table) */
+        .styled-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+            font-family: 'Arial', sans-serif;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .styled-table thead tr {
+            background-color: #17365D;
+            color: #ffffff;
+            text-align: left;
+        }
+        .styled-table th, .styled-table td { padding: 15px; }
+        .styled-table tbody tr { border-bottom: 1px solid #dddddd; }
+        .styled-table tbody tr:nth-of-type(even) { background-color: #F8FAFC; }
+        .styled-table tbody tr:hover { background-color: #F1F5F9; }
+    </style>
 """, unsafe_allow_html=True)
 
-# Tajuk
-st.title("Dashboard Pemantauan Projek PPUN (MOTAC)")
-st.write(f"**Data dikemaskini pada:** {datetime.datetime.now().strftime('%d/%m/%Y %I:%M %p')}")
+# 3. Banner Tajuk Dashboard
+masa_kini = datetime.datetime.now().strftime('%d/%m/%Y %I:%M %p')
+st.markdown(f"""
+    <div class="corporate-header">
+        <h1>🏢 Dashboard Pemantauan Projek PPUN</h1>
+        <p>Kementerian Pelancongan, Seni dan Budaya (MOTAC) | Data Terkini: {masa_kini}</p>
+    </div>
+""", unsafe_allow_html=True)
 
-# Fungsi untuk load data (Cache supaya tak berat)
-@st.cache_data(ttl=60) # Cache tahan 60 saat sebelum tarik data baru
+# 4. Fungsi Load Data dari Sheet
+@st.cache_data(ttl=30) # Refresh automatik lepas 30 saat
 def load_data(url):
     try:
-        # Pandas boleh terus baca link CSV
         df = pd.read_csv(url)
-        
-        # Bersihkan data (buang baris yang semua kolum kosong)
-        df = df.dropna(how='all')
-        
-        # Isi NaN dengan string kosong supaya kemas
-        df = df.fillna("")
-        
+        df = df.dropna(how='all').fillna("-") # Buang baris kosong, tukar NaN jadi "-"
         return df
     except Exception as e:
-        st.error(f"Gagal memuat turun data. Sila semak link Google Sheet. Ralat: {e}")
         return pd.DataFrame()
 
-# Muat data
-with st.spinner('Sedang menarik data dari Google Sheet...'):
+with st.spinner('Sedang menarik data dari pelayan...'):
     df = load_data(SHEET_URL)
 
 if not df.empty:
     
-    # 1. Bahagian Metrik (Statistik)
+    # 5. Bahagian Statistik
     col1, col2, col3 = st.columns(3)
     
-    jumlah_projek = len(df)
-    # Andaikan kolum status bernama 'Status Semasa'. Tukar nama kolum ini jika berbeza dalam Sheet anda.
+    # Tukar nama 'Status Semasa' di bawah ini mengikut nama kolum sebenar dalam Google Sheet kau
     if 'Status Semasa' in df.columns:
-        status_siap = df[df['Status Semasa'].str.contains("Siap|Selesai", case=False, na=False)].shape[0]
-        status_proses = df[df['Status Semasa'].str.contains("Proses|Progress|Laksana", case=False, na=False)].shape[0]
+        siap = df[df['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)].shape[0]
+        proses = df[df['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana", case=False, na=False)].shape[0]
     else:
-        status_siap = 0
-        status_proses = 0
+        siap, proses = 0, 0
 
-    col1.metric("Jumlah Projek", jumlah_projek)
-    col2.metric("Telah Siap", status_siap)
-    col3.metric("Dalam Pelaksanaan", status_proses)
+    col1.metric("📊 Jumlah Projek", len(df))
+    col2.metric("✅ Telah Siap", siap)
+    col3.metric("🚧 Dalam Pelaksanaan", proses)
     
-    st.markdown("---")
+    st.write("---")
 
-    # 2. Bahagian Carian
-    carian = st.text_input("🔍 Cari Projek (Nama / Agensi / Kontraktor):", "")
+    # 6. Kotak Carian
+    carian = st.text_input("🔍 Carian Pantas (Taip nama projek, agensi, atau kontraktor):", "")
     
-    # Tapis data berdasarkan carian
     if carian:
-        # Buat carian di semua kolum utama
         mask = pd.Series([False] * len(df))
-        for col in ['Tajuk Program', 'Agensi Pelaksana', 'Kontraktor', 'Status Semasa']:
-            if col in df.columns:
-                mask = mask | df[col].astype(str).str.contains(carian, case=False, na=False)
+        # Tapis mengikut apa sahaja maklumat dalam jadual
+        for col in df.columns:
+            mask = mask | df[col].astype(str).str.contains(carian, case=False, na=False)
         df_dipapar = df[mask]
     else:
         df_dipapar = df
 
-    # 3. Papar Jadual
+    # 7. Render Jadual menggunakan HTML supaya nampak cantik & korporat
     if not df_dipapar.empty:
-        # Buang kolum Gambar Projek untuk paparan jadual pandas biasa jika mahu nampak kemas
-        # Tapi kita paparkan semua buat masa ini.
-        st.dataframe(
-            df_dipapar,
-            use_container_width=True,
-            hide_index=True
-        )
+        html_table = df_dipapar.to_html(classes="styled-table", index=False, escape=False)
+        st.markdown(html_table, unsafe_allow_html=True)
     else:
-        st.info("Tiada projek dijumpai untuk carian tersebut.")
+        st.info("Tiada rekod dijumpai.")
 
-   # 4. Butang Refresh Manual (Pilihan)
+    st.write("")
+    
+    # 8. Butang Refresh Condong (Italic)
     if st.button("*Refresh* 🔄"):
-        st.cache_data.clear() # Kosongkan cache
-        st.rerun() # Reload app
+        st.cache_data.clear()
+        st.rerun()
 
 else:
-    st.warning("Data projek kosong atau tidak dijumpai.")
+    st.error("Gagal menarik data. Pastikan link Google Sheet dimasukkan dengan betul.")
