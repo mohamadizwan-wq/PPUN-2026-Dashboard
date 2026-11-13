@@ -4,13 +4,14 @@ import datetime
 import re
 import time
 import os
+import base64
 
 # ==========================================
-# LINK GOOGLE SHEET 
+# LINK GOOGLE SHEET
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/103YxYTV0SECLCN7lkbWCVph8wRzVxqoPZozLb8d9Lc0/edit?gid=0#gid=0"
 
-st.set_page_config(page_title="Dashboard Eksekutif PPUN", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Dashboard Eksekutif PPUN", page_icon="📈", layout="wide")
 
 st.markdown("""
     <style>
@@ -19,18 +20,17 @@ st.markdown("""
         header {visibility: hidden;}
         footer {visibility: hidden;}
 
-        [data-testid="stSidebar"] { background-color: #0F172A; color: white; }
-        [data-testid="stSidebar"] * { color: #E2E8F0 !important; }
-        
+        /* Banner Utama */
         .exec-header {
             background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-            padding: 25px 40px; border-radius: 16px; border-left: 8px solid #D4AF37;
+            padding: 30px 40px; border-radius: 16px; border-left: 8px solid #D4AF37;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-bottom: 30px; margin-top: 10px;
             display: flex; justify-content: space-between; align-items: center;
         }
-        .exec-title h1 { color: #FFFFFF !important; font-size: 30px; font-weight: 800; margin: 0; letter-spacing: -0.5px;}
-        .exec-title p { color: #94A3B8 !important; font-size: 14px; margin: 8px 0 0 0; font-weight: 500; }
+        .exec-title h1 { color: #FFFFFF !important; font-size: 32px; font-weight: 800; margin: 0; letter-spacing: -0.5px;}
+        .exec-title p { color: #94A3B8 !important; font-size: 15px; margin: 8px 0 0 0; font-weight: 500; }
         
+        /* Kad KPI */
         .kpi-wrapper { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
         .kpi-card {
             flex: 1; min-width: 230px; background: #FFFFFF; padding: 25px; border-radius: 16px;
@@ -41,6 +41,13 @@ st.markdown("""
         .val-siap { color: #059669; }
         .val-proses { color: #D97706; }
 
+        /* Kad Filter Bar */
+        .filter-bar {
+            background: white; padding: 20px 25px 5px 25px; border-radius: 12px;
+            border: 1px solid #E2E8F0; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 30px;
+        }
+
+        /* Kad Projek */
         .proj-card {
             background: white; border-radius: 12px; padding: 20px;
             border: 1px solid #E2E8F0; border-top: 4px solid #1E293B; margin-bottom: 20px;
@@ -55,6 +62,15 @@ st.markdown("""
         hr { border-color: #E2E8F0; margin: 15px 0; }
     </style>
 """, unsafe_allow_html=True)
+
+# Fungsi tukar gambar ke Base64 (Untuk pastikan alignment HTML sempurna)
+def get_base64_image(file_name):
+    for ext in ['.png', '.jpg', '.jpeg']:
+        path = f"{file_name}{ext}"
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                return f"data:image/{ext.replace('.', '')};base64,{base64.b64encode(f.read()).decode()}"
+    return None
 
 def dapatkan_link_gambar(url):
     if pd.isna(url) or url == "-": return None
@@ -86,78 +102,29 @@ def load_data(url):
     except Exception as e:
         return pd.DataFrame()
 
+# ==========================================
+# 1. LOGO JATA & JABATAN (KIRI ATAS - ALIGNMENT SEMPURNA)
+# ==========================================
+jata_img = get_base64_image("jata")
+jabatan_img = get_base64_image("jabatan")
+
+logo_html = '<div style="display: flex; align-items: center; gap: 25px; margin-bottom: 5px;">'
+if jata_img:
+    logo_html += f'<img src="{jata_img}" style="height: 90px; object-fit: contain;">'
+if jabatan_img:
+    logo_html += f'<img src="{jabatan_img}" style="height: 90px; object-fit: contain;">'
+logo_html += '</div>'
+
+st.markdown(logo_html, unsafe_allow_html=True)
+
 with st.spinner('Menyegerak pangkalan data MOTAC...'):
     df = load_data(SHEET_URL)
 
 if not df.empty:
     
-    # ==========================
-    # MENU KIRI (SIDEBAR) & LOGO MADANI
-    # ==========================
-    with st.sidebar:
-        st.markdown("<h2 style='text-align: center;'>⚙️ Panel Kawalan</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; font-size:13px;'>Tapis data projek di sini</p><hr style='border-color:#334155;'>", unsafe_allow_html=True)
-        
-        senarai_agensi = ["Semua Agensi"] + list(df['Agensi Pelaksana'].unique()) if 'Agensi Pelaksana' in df.columns else ["Semua Agensi"]
-        senarai_agensi = [x for x in senarai_agensi if x != "-"]
-        
-        carian_teks = st.text_input("🔍 Cari Projek / Kontraktor:")
-        pilih_agensi = st.selectbox("🏢 Pilih Agensi:", senarai_agensi)
-        pilih_status = st.selectbox("📊 Status Projek:", ["Semua Status", "Telah Siap", "Dalam Pelaksanaan", "Lain-lain"])
-        
-        st.markdown("<hr style='border-color:#334155;'>", unsafe_allow_html=True)
-        if st.button("🔄 *Refresh*", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-            
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        
-        # Susun Logo Madani di Bawah Kiri (Sidebar)
-        col_m1, col_m2, col_m3 = st.columns([1, 2, 1])
-        for ext in ['.png', '.jpg', '.jpeg']:
-            if os.path.exists(f"madani{ext}"):
-                with col_m2:
-                    st.image(f"madani{ext}", use_container_width=True)
-                break
-                
-        st.markdown("<div style='margin-top:10px; text-align:center; font-size:12px; color:#94A3B8;'>Sistem Pemantauan V2.0<br>© 2026 MOTAC</div>", unsafe_allow_html=True)
-
-    # Logik Tapisan
-    df_tapis = df.copy()
-    if carian_teks:
-        mask = pd.Series([False] * len(df_tapis))
-        for col in df_tapis.columns: mask = mask | df_tapis[col].astype(str).str.contains(carian_teks, case=False, na=False)
-        df_tapis = df_tapis[mask]
-    if pilih_agensi != "Semua Agensi": df_tapis = df_tapis[df_tapis['Agensi Pelaksana'] == pilih_agensi]
-    if pilih_status != "Semua Status":
-        if pilih_status == "Telah Siap": df_tapis = df_tapis[df_tapis['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)]
-        elif pilih_status == "Dalam Pelaksanaan": df_tapis = df_tapis[df_tapis['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)]
-
-    jumlah_projek = len(df)
-    siap = df[df['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)].shape[0] if 'Status Semasa' in df.columns else 0
-    proses = df[df['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)].shape[0] if 'Status Semasa' in df.columns else 0
-
-    # ==========================
-    # LOGO JATA & JABATAN (ATAS KIRI MAIN PAGE)
-    # ==========================
-    col_img1, col_img2, col_kosong = st.columns([1, 1, 10])
-    
-    def papar_logo(nama_fail, kolum):
-        for ext in ['.png', '.jpg', '.jpeg']:
-            if os.path.exists(f"{nama_fail}{ext}"):
-                with kolum:
-                    st.image(f"{nama_fail}{ext}", width=80)
-                break
-                
-    papar_logo("jata", col_img1)
-    papar_logo("jabatan", col_img2)
-
-    # ==========================
-    # BANNER UTAMA
-    # ==========================
+    # ==========================================
+    # 2. BANNER UTAMA
+    # ==========================================
     masa_kini = datetime.datetime.now().strftime('%d/%m/%Y, %I:%M %p')
     st.markdown(f"""
         <div class="exec-header">
@@ -167,6 +134,13 @@ if not df.empty:
             </div>
         </div>
     """, unsafe_allow_html=True)
+
+    # ==========================================
+    # 3. KAD KPI STATISTIK
+    # ==========================================
+    jumlah_projek = len(df)
+    siap = df[df['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)].shape[0] if 'Status Semasa' in df.columns else 0
+    proses = df[df['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)].shape[0] if 'Status Semasa' in df.columns else 0
 
     st.markdown(f"""
         <div class="kpi-wrapper">
@@ -185,9 +159,43 @@ if not df.empty:
         </div>
     """, unsafe_allow_html=True)
 
+    # ==========================================
+    # 4. PANEL KAWALAN DI MAIN PAGE (FILTER BAR)
+    # ==========================================
+    st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
+    st.markdown("<h4 style='margin-top:0; color:#0F172A; font-size:16px;'>⚙️ Panel Carian & Tapisan Data</h4>", unsafe_allow_html=True)
+    
+    senarai_agensi = ["Semua Agensi"] + list(df['Agensi Pelaksana'].unique()) if 'Agensi Pelaksana' in df.columns else ["Semua Agensi"]
+    senarai_agensi = [x for x in senarai_agensi if x != "-"]
+    
+    col_f1, col_f2, col_f3, col_f4 = st.columns([2.5, 2, 2, 1.5])
+    with col_f1: carian_teks = st.text_input("🔍 Cari Projek / Kontraktor:")
+    with col_f2: pilih_agensi = st.selectbox("🏢 Agensi Pelaksana:", senarai_agensi)
+    with col_f3: pilih_status = st.selectbox("📊 Status:", ["Semua Status", "Telah Siap", "Dalam Pelaksanaan", "Lain-lain"])
+    with col_f4: 
+        st.write("") # Spacer letak butang ke bawah sikit bagi selari
+        if st.button("🔄 *Refresh*", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Logik Tapisan
+    df_tapis = df.copy()
+    if carian_teks:
+        mask = pd.Series([False] * len(df_tapis))
+        for col in df_tapis.columns: mask = mask | df_tapis[col].astype(str).str.contains(carian_teks, case=False, na=False)
+        df_tapis = df_tapis[mask]
+    if pilih_agensi != "Semua Agensi": df_tapis = df_tapis[df_tapis['Agensi Pelaksana'] == pilih_agensi]
+    if pilih_status != "Semua Status":
+        if pilih_status == "Telah Siap": df_tapis = df_tapis[df_tapis['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)]
+        elif pilih_status == "Dalam Pelaksanaan": df_tapis = df_tapis[df_tapis['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)]
+
     st.markdown(f"### 📑 Hasil Carian: {len(df_tapis)} Projek Rekod Ditemui")
     st.write("")
 
+    # ==========================================
+    # 5. KAD PROJEK
+    # ==========================================
     if not df_tapis.empty:
         for idx, row in df_tapis.iterrows():
             stat_text = str(row.get('Status Semasa', '-'))
@@ -229,6 +237,14 @@ if not df.empty:
                 st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.warning("Tiada rekod projek yang sepadan dengan carian/tapisan anda.")
+
+    # ==========================================
+    # 6. LOGO MADANI DI BAWAH KIRI
+    # ==========================================
+    st.write("---")
+    madani_img = get_base64_image("madani")
+    if madani_img:
+        st.markdown(f'<div style="text-align: left;"><img src="{madani_img}" style="height: 60px; object-fit: contain;"></div>', unsafe_allow_html=True)
 
 else:
     st.error("Gagal menarik data. Pastikan Google Sheet diset kepada 'Anyone with the link' (Viewer).")
