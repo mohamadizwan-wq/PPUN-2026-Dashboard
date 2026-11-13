@@ -51,6 +51,11 @@ st.markdown("""
             background: white; padding: 20px 25px 20px 25px; border-radius: 12px;
             border: 1px solid #E2E8F0; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 20px;
         }
+        
+        .date-selector-card {
+            background: #F8FAFC; padding: 15px 25px; border-radius: 12px;
+            border: 1px dashed #CBD5E1; margin-bottom: 20px;
+        }
 
         .proj-card {
             background: white; border-radius: 12px; padding: 25px;
@@ -86,21 +91,14 @@ def get_base64_image(file_name):
                 return f"data:image/{ext.replace('.', '')};base64,{base64.b64encode(f.read()).decode()}"
     return None
 
-# FUNGSI BARU (DIPERBAIKI): Guna enjin 'thumbnail' Google Drive supaya gambar tak patah
 def dapatkan_senarai_gambar(teks):
     if pd.isna(teks) or teks == "-": return []
     teks = str(teks)
-    
-    # Cari semua ID Google drive
     ids = re.findall(r'/d/([a-zA-Z0-9_-]+)', teks)
     ids += re.findall(r'id=([a-zA-Z0-9_-]+)', teks)
-    
-    # Buang ID yang berulang
     ids = list(set(ids))
-    
     urls = []
     for file_id in ids:
-        # Guna endpoint thumbnail w1000 (lebar 1000px) untuk pintas sekuriti Google
         urls.append(f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000")
     return urls
 
@@ -152,7 +150,7 @@ if not df.empty:
     if 'Tarikh Kemaskini' in df.columns:
         tarikh_sah = df[df['Tarikh Kemaskini'] != '-']['Tarikh Kemaskini']
         if not tarikh_sah.empty:
-            tarikh_last_save = tarikh_sah.iloc[0]
+            tarikh_last_save = tarikh_sah.iloc[-1] # Ambil rekod paling latest di bawah sheet
 
     # ==========================================
     # 2. BANNER UTAMA
@@ -161,7 +159,7 @@ if not df.empty:
         <div class="exec-header">
             <div class="exec-title">
                 <h1>DASHBOARD EKSEKUTIF PPUN</h1>
-                <p>Pemantauan Projek Infrastruktur Pelancongan | <b>Dikemaskini: {tarikh_last_save} (Berdasarkan Rekod Sheet)</b></p>
+                <p>Pemantauan Projek Infrastruktur Pelancongan | <b>Kemas Kini Terakhir: {tarikh_last_save}</b></p>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -169,9 +167,15 @@ if not df.empty:
     # ==========================================
     # 3. KAD KPI STATISTIK
     # ==========================================
-    jumlah_projek = len(df)
-    siap = df[df['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)].shape[0] if 'Status Semasa' in df.columns else 0
-    proses = df[df['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)].shape[0] if 'Status Semasa' in df.columns else 0
+    # Pastikan statistik hanya kira 1 projek 1 status (tak duplicate kalau ada banyak tarikh)
+    if 'Tajuk Program' in df.columns:
+        df_latest = df.drop_duplicates(subset=['Tajuk Program'], keep='last')
+    else:
+        df_latest = df
+        
+    jumlah_projek = len(df_latest)
+    siap = df_latest[df_latest['Status Semasa'].astype(str).str.contains("Siap|Selesai", case=False, na=False)].shape[0] if 'Status Semasa' in df_latest.columns else 0
+    proses = df_latest[df_latest['Status Semasa'].astype(str).str.contains("Proses|Progress|Laksana|Sedang", case=False, na=False)].shape[0] if 'Status Semasa' in df_latest.columns else 0
 
     st.markdown(f"""
         <div class="kpi-wrapper">
@@ -196,7 +200,7 @@ if not df.empty:
     st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
     st.markdown("<h4 style='margin-top:0; color:#0F172A; font-size:16px;'>⚙️ Panel Carian & Pemilihan Projek</h4>", unsafe_allow_html=True)
     
-    senarai_agensi = ["Semua Agensi"] + list(df['Agensi Pelaksana'].unique()) if 'Agensi Pelaksana' in df.columns else ["Semua Agensi"]
+    senarai_agensi = ["Semua Agensi"] + list(df_latest['Agensi Pelaksana'].unique()) if 'Agensi Pelaksana' in df_latest.columns else ["Semua Agensi"]
     senarai_agensi = [x for x in senarai_agensi if x != "-"]
     
     col_f1, col_f2, col_f3, col_f4 = st.columns([2.5, 2, 2, 1.5])
@@ -209,7 +213,7 @@ if not df.empty:
             st.cache_data.clear()
             st.rerun()
 
-    df_tapis = df.copy()
+    df_tapis = df_latest.copy()
     if carian_teks:
         mask = pd.Series([False] * len(df_tapis))
         for col in df_tapis.columns: mask = mask | df_tapis[col].astype(str).str.contains(carian_teks, case=False, na=False)
@@ -225,18 +229,32 @@ if not df.empty:
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ==========================================
-    # 5. KAD PROJEK & GALERI GAMBAR
+    # 5. KAD PROJEK & GALERI GAMBAR BERDASARKAN TARIKH
     # ==========================================
     if pilihan_akhir != "-- Sila Pilih Projek Untuk Dipaparkan --":
         
-        row = df_tapis[df_tapis['Tajuk Program'] == pilihan_akhir].iloc[0]
+        # Ambil SEMUA rekod (sejarah) untuk projek yang dipilih ni dari master dataframe
+        df_projek_ini = df[df['Tajuk Program'] == pilihan_akhir].copy()
+        
+        # Dapatkan senarai tarikh yang ada untuk projek ni
+        senarai_tarikh_projek = df_projek_ini['Tarikh Kemaskini'].astype(str).unique().tolist()
+        
+        # Paparkan dropdown pilih tarikh
+        st.markdown('<div class="date-selector-card">', unsafe_allow_html=True)
+        col_t1, col_t2 = st.columns([1, 2])
+        with col_t1:
+            st.markdown("<h4 style='margin-top:5px; color:#1E293B;'>📅 Pilih Tarikh Laporan:</h4>", unsafe_allow_html=True)
+        with col_t2:
+            pilihan_tarikh = st.selectbox("Sila pilih rekod tarikh kemajuan yang ingin dilihat:", senarai_tarikh_projek, label_visibility="collapsed")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Filter rekod berdasarkan tarikh yang dipilih
+        row = df_projek_ini[df_projek_ini['Tarikh Kemaskini'].astype(str) == pilihan_tarikh].iloc[-1]
         
         stat_text = str(row.get('Status Semasa', '-'))
         if "siap" in stat_text.lower() or "selesai" in stat_text.lower(): badge_html = f"<span class='badge b-siap'>✓ {stat_text.upper()}</span>"
         elif "proses" in stat_text.lower() or "laksana" in stat_text.lower() or "sedang" in stat_text.lower(): badge_html = f"<span class='badge b-proses'>⏳ {stat_text.upper()}</span>"
         else: badge_html = f"<span class='badge b-lewat'>⚠️ {stat_text.upper()}</span>"
-
-        tarikh_projek_ini = row.get('Tarikh Kemaskini', 'Tiada Tarikh')
 
         with st.container():
             st.markdown(f"""
@@ -251,7 +269,6 @@ if not df.empty:
                 <hr>
             """, unsafe_allow_html=True)
             
-            # Maklumat Projek
             col1, col2, col3 = st.columns([1.5, 1, 1])
             with col1:
                 st.markdown("**📌 Skop Kerja Utama:**")
@@ -263,10 +280,10 @@ if not df.empty:
                 st.write(f"**Tarikh Mula:** {row.get('Tarikh Mula', '-')}")
                 st.write(f"**Tarikh Siap:** {row.get('Tarikh Siap', '-')}")
             with col3:
-                st.markdown("**👷🏻‍♂️ Pelaksanaan:**")
+                st.markdown("**👷🏻‍♂️ Pelaksanaan (Rekod Pada Tarikh Dipilih):**")
                 st.write(f"**Kontraktor:** {row.get('Kontraktor', '-')}")
                 st.write(f"**Kemajuan Fizikal:** {row.get('Peratus Siap Kerja', '-')}")
-                st.write(f"**Tarikh Kemaskini:** {tarikh_projek_ini}")
+                st.write(f"**Tarikh Kemaskini:** {pilihan_tarikh}")
             
             st.markdown("<hr style='border-color: #E2E8F0;'>", unsafe_allow_html=True)
             
@@ -274,16 +291,15 @@ if not df.empty:
             senarai_gambar = dapatkan_senarai_gambar(row.get('Gambar Projek', '-'))
             
             if senarai_gambar:
-                with st.expander("📸 KLIK DI SINI UNTUK BUKA GALERI GAMBAR PROJEK"):
-                    st.markdown(f"<h4 style='color:#1E293B; text-align:center;'>Visual Tapak Projek (Kemaskini: {tarikh_projek_ini})</h4><br>", unsafe_allow_html=True)
+                with st.expander(f"📸 KLIK DI SINI UNTUK BUKA GALERI GAMBAR PROJEK (REKOD: {pilihan_tarikh})"):
+                    st.markdown(f"<h4 style='color:#1E293B; text-align:center;'>Visual Tapak Projek (Kemaskini: {pilihan_tarikh})</h4><br>", unsafe_allow_html=True)
                     
                     img_cols = st.columns(3)
                     for i, img_url in enumerate(senarai_gambar):
                         with img_cols[i % 3]:
-                            # Gambar ditarik guna URL Thumbnail
-                            st.image(img_url, caption=f"Gambar {i+1} | Tarikh: {tarikh_projek_ini}", use_container_width=True)
+                            st.image(img_url, caption=f"Gambar {i+1} | Tarikh: {pilihan_tarikh}", use_container_width=True)
             else:
-                st.info("📷 Tiada gambar dimasukkan untuk projek ini.")
+                st.info(f"📷 Tiada gambar dimasukkan untuk projek ini pada rekod tarikh {pilihan_tarikh}.")
                 
             st.markdown("</div>", unsafe_allow_html=True)
     else:
