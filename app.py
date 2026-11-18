@@ -118,10 +118,21 @@ def load_data(url):
         live_url = bina_link_live(url)
         df = pd.read_csv(live_url, skiprows=1)
         df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
+        
+        # PENYELESAIAN MERGED CELLS (Forward Fill)
+        if 'Tajuk Program' in df.columns:
+            df['Tajuk Program'] = df['Tajuk Program'].ffill()
+        if 'Agensi Pelaksana' in df.columns:
+            df['Agensi Pelaksana'] = df['Agensi Pelaksana'].ffill()
+        if 'Bil.' in df.columns:
+            df['Bil.'] = df['Bil.'].ffill()
+            
         df = df.dropna(how='all').fillna("-")
+        
         if 'Bil.' in df.columns:
             df['Bil.'] = pd.to_numeric(df['Bil.'], errors='coerce').fillna(0).astype(int).astype(str)
             df['Bil.'] = df['Bil.'].replace('0', '-')
+            
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -150,7 +161,7 @@ if not df.empty:
     if 'Tarikh Kemaskini' in df.columns:
         tarikh_sah = df[df['Tarikh Kemaskini'] != '-']['Tarikh Kemaskini']
         if not tarikh_sah.empty:
-            tarikh_last_save = tarikh_sah.iloc[-1] # Ambil rekod paling latest di bawah sheet
+            tarikh_last_save = tarikh_sah.iloc[-1] 
 
     # ==========================================
     # 2. BANNER UTAMA
@@ -167,7 +178,6 @@ if not df.empty:
     # ==========================================
     # 3. KAD KPI STATISTIK
     # ==========================================
-    # Pastikan statistik hanya kira 1 projek 1 status (tak duplicate kalau ada banyak tarikh)
     if 'Tajuk Program' in df.columns:
         df_latest = df.drop_duplicates(subset=['Tajuk Program'], keep='last')
     else:
@@ -233,13 +243,9 @@ if not df.empty:
     # ==========================================
     if pilihan_akhir != "-- Sila Pilih Projek Untuk Dipaparkan --":
         
-        # Ambil SEMUA rekod (sejarah) untuk projek yang dipilih ni dari master dataframe
         df_projek_ini = df[df['Tajuk Program'] == pilihan_akhir].copy()
-        
-        # Dapatkan senarai tarikh yang ada untuk projek ni
         senarai_tarikh_projek = df_projek_ini['Tarikh Kemaskini'].astype(str).unique().tolist()
         
-        # Paparkan dropdown pilih tarikh
         st.markdown('<div class="date-selector-card">', unsafe_allow_html=True)
         col_t1, col_t2 = st.columns([1, 2])
         with col_t1:
@@ -248,7 +254,6 @@ if not df.empty:
             pilihan_tarikh = st.selectbox("Sila pilih rekod tarikh kemajuan yang ingin dilihat:", senarai_tarikh_projek, label_visibility="collapsed")
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Filter rekod berdasarkan tarikh yang dipilih
         row = df_projek_ini[df_projek_ini['Tarikh Kemaskini'].astype(str) == pilihan_tarikh].iloc[-1]
         
         stat_text = str(row.get('Status Semasa', '-'))
@@ -287,7 +292,6 @@ if not df.empty:
             
             st.markdown("<hr style='border-color: #E2E8F0;'>", unsafe_allow_html=True)
             
-            # RUANG GALERI GAMBAR
             senarai_gambar = dapatkan_senarai_gambar(row.get('Gambar Projek', '-'))
             
             if senarai_gambar:
