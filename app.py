@@ -13,7 +13,7 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/103YxYTV0SECLCN7lkbWCVph8wRz
 # Set layout kepada "wide"
 st.set_page_config(page_title="Dashboard Eksekutif PPUN", page_icon="📈", layout="wide")
 
-# CSS Paksaan Full Screen & Design
+# CSS Paksaan Full Screen & Design Premium
 st.markdown("""
     <style>
         .block-container {
@@ -71,7 +71,7 @@ st.markdown("""
         .b-lewat { background: #FEE2E2; color: #991B1B; border: 1px solid #F87171; }
         hr { border-color: #E2E8F0; margin: 15px 0; }
         
-        /* Design butang expander */
+        /* Design butang expander (Galeri Gambar) */
         .streamlit-expanderHeader {
             font-size: 16px !important;
             font-weight: bold !important;
@@ -83,6 +83,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ==========================================
+# FUNGSI PEMBANTU
+# ==========================================
 def get_base64_image(file_name):
     for ext in ['.png', '.jpg', '.jpeg']:
         path = f"{file_name}{ext}"
@@ -119,14 +122,11 @@ def load_data(url):
         df = pd.read_csv(live_url, skiprows=1)
         df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
         
-        # PENYELESAIAN MERGED CELLS (Forward Fill)
-        if 'Tajuk Program' in df.columns:
-            df['Tajuk Program'] = df['Tajuk Program'].ffill()
-        if 'Agensi Pelaksana' in df.columns:
-            df['Agensi Pelaksana'] = df['Agensi Pelaksana'].ffill()
-        if 'Bil.' in df.columns:
-            df['Bil.'] = df['Bil.'].ffill()
-            
+        # PENYELESAIAN MERGED CELLS: 
+        # Tampal (Forward Fill) SEMUA kolum supaya tiada data tercicir
+        df = df.ffill() 
+        
+        # Buang baris yang betul-betul kosong
         df = df.dropna(how='all').fillna("-")
         
         if 'Bil.' in df.columns:
@@ -152,6 +152,9 @@ logo_html += '</div>'
 
 st.markdown(logo_html, unsafe_allow_html=True)
 
+# ==========================================
+# MULA TARIK DATA & RENDER DASHBOARD
+# ==========================================
 with st.spinner('Menyegerak pangkalan data MOTAC...'):
     df = load_data(SHEET_URL)
 
